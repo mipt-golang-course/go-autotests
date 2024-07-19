@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+.DS_Store
 
 # Test binary, built with `go test -c`
 *.test
@@ -15,8 +16,20 @@
 *.out
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor/
 
 # Go workspace file
 go.work
 go.work.sum
+
+# IDEs directories
+.idea
+.vscode
+
+# Ignore artifacts
+cmd/statictest/statictest
+cmd/metricstest/metricstest
+
+# Allow bin directory but not artifacts
+bin/*
+!bin/README.md
