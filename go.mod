@@ -1,6 +1,6 @@
 module github.com/mipt-golang-course/go-autotests
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/go-resty/resty/v2 v2.7.0
@@ -8,7 +8,7 @@ require (
 	github.com/jingyugao/rowserrcheck v1.1.1
 	github.com/stretchr/testify v1.8.0
 	github.com/timakin/bodyclose v0.0.0-20230421092635-574207250966
-	golang.org/x/tools v0.6.0
+	golang.org/x/tools v0.40.0
 	honnef.co/go/tools v0.4.3
 )
 
@@ -24,11 +24,13 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
-	golang.org/x/crypto v0.14.0 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
-	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.17.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
-	golang.org/x/text v0.13.0 // indirect
+	golang.org/x/mod v0.31.0 // indirect
+	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/tools/go/expect v0.1.1-deprecated // indirect
+	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
