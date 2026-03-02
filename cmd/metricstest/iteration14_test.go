@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
@@ -184,9 +185,9 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 
 		var result Metrics
 		resp, err := suite.SetSignedBody(req, &Metrics{
-				ID:    id,
-				MType: "counter",
-			}).
+			ID:    id,
+			MType: "counter",
+		}).
 			SetResult(&result).
 			Post("value/")
 
@@ -213,10 +214,10 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 		}
 
 		resp, err = suite.SetSignedBody(req, &Metrics{
-				ID:    id,
-				MType: "counter",
-				Delta: &value1,
-			}).Post("update/")
+			ID:    id,
+			MType: "counter",
+			Delta: &value1,
+		}).Post("update/")
 
 		dumpErr = dumpErr && suite.Assert().NoError(err,
 			"Ошибка при попытке сделать запрос с обновлением counter")
@@ -227,10 +228,10 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 
 		resp, err = suite.SetSignedBody(req, &Metrics{
-				ID:    id,
-				MType: "counter",
-				Delta: &value2,
-			}).Post("update/")
+			ID:    id,
+			MType: "counter",
+			Delta: &value2,
+		}).Post("update/")
 
 		dumpErr = dumpErr && suite.Assert().NoError(err,
 			"Ошибка при попытке сделать запрос с обновлением counter")
@@ -241,9 +242,9 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 
 		resp, err = suite.SetSignedBody(req, &Metrics{
-				ID:    id,
-				MType: "counter",
-			}).
+			ID:    id,
+			MType: "counter",
+		}).
 			SetResult(&result).
 			Post("value/")
 
@@ -290,10 +291,10 @@ func (suite *Iteration14Suite) TestGaugeGzipHandlers() {
 			SetHeader("Content-Type", "application/json")
 
 		resp, err := suite.SetSignedBody(req, &Metrics{
-				ID:    id,
-				MType: "gauge",
-				Value: &value,
-			}).Post("update/")
+			ID:    id,
+			MType: "gauge",
+			Value: &value,
+		}).Post("update/")
 
 		dumpErr := suite.Assert().NoError(err,
 			"Ошибка при попытке сделать запрос с обновлением gauge")
@@ -305,9 +306,9 @@ func (suite *Iteration14Suite) TestGaugeGzipHandlers() {
 
 		var result Metrics
 		resp, err = suite.SetSignedBody(req, &Metrics{
-				ID:    id,
-				MType: "gauge",
-			}).
+			ID:    id,
+			MType: "gauge",
+		}).
 			SetResult(&result).
 			Post("value/")
 
@@ -403,9 +404,9 @@ cont:
 
 			var result Metrics
 			resp, err = suite.SetSignedBody(req, &Metrics{
-					ID:    tt.name,
-					MType: tt.method,
-				}).
+				ID:    tt.name,
+				MType: tt.method,
+			}).
 				SetResult(&result).
 				Post("/value/")
 
@@ -416,6 +417,8 @@ cont:
 				continue
 			}
 
+			dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
+				"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().Containsf(resp.Header().Get("Content-Type"), "application/json",
 				"Заголовок ответа Content-Type содержит несоответствующее значение")
 			dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
@@ -429,8 +432,6 @@ cont:
 				"Получен результат без данных (Dalta == nil && Value == nil) '%q %s'", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().False(result.Delta != nil && result.Value != nil,
 				"Получен не однозначный результат (Dalta != nil && Value != nil) '%q %s'", req.Method, req.URL)
-			dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
-				"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().True(result.MType == "gauge" || result.MType == "counter",
 				"Получен ответ с неизвестным значением типа: %q, '%q %s'", result.MType, req.Method, req.URL)
 
@@ -501,10 +502,10 @@ func (suite *Iteration14Suite) SetSignedBody(r *resty.Request, m *Metrics) *rest
 		SetBody(body)
 }
 
-func (suite *Iteration14Suite) Hash(body []byte) string {
-	data := append(body, suite.key...)
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+func (suite *Iteration14Suite) Hash(data []byte) string {
+	h := hmac.New(sha256.New, suite.key)
+	h.Write([]byte(data))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func (suite *Iteration14Suite) AssertResponseHash(resp *resty.Response) bool {
