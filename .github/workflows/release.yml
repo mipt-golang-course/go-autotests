@@ -33,6 +33,6 @@ jobs:
           make all
 
       - name: Release artifacts
-        uses: ncipollo/release-action@v4
+        uses: ncipollo/release-action@v1
         with:
           artifacts: "bin/*"
