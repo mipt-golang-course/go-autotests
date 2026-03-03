@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
-	// "crypto/hmac"
-	// "crypto/sha256"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
@@ -56,7 +58,7 @@ func (suite *Iteration14Suite) SetupSuite() {
 		"-k=" + flagSHA256Key,
 	}
 	serverArgs := []string{
-		"-k=invalidkey",
+		"-k=" + flagSHA256Key,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -182,11 +184,10 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 			SetHeader("Content-Type", "application/json")
 
 		var result Metrics
-		resp, err := req.
-			SetBody(&Metrics{
-				ID:    id,
-				MType: "counter",
-			}).
+		resp, err := suite.SetSignedBody(req, &Metrics{
+			ID:    id,
+			MType: "counter",
+		}).
 			SetResult(&result).
 			Post("value/")
 
@@ -199,6 +200,9 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 				"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().Containsf(resp.Header().Get("Content-Type"), "application/json",
 				"Заголовок ответа Content-Type содержит несоответствующее значение")
+			dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+				"Отсутствует заголовок HashSHA256 в ответе")
+			dumpErr = dumpErr && suite.AssertResponseHash(resp)
 			dumpErr = dumpErr && suite.NotNil(result.Delta,
 				"Получено не инициализированное значение Delta '%q %s'", req.Method, req.URL)
 			value0 = *result.Delta
@@ -209,35 +213,38 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 			return
 		}
 
-		resp, err = req.SetBody(
-			&Metrics{
-				ID:    id,
-				MType: "counter",
-				Delta: &value1,
-			}).Post("update/")
+		resp, err = suite.SetSignedBody(req, &Metrics{
+			ID:    id,
+			MType: "counter",
+			Delta: &value1,
+		}).Post("update/")
 
 		dumpErr = dumpErr && suite.Assert().NoError(err,
 			"Ошибка при попытке сделать запрос с обновлением counter")
 		dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
 			"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
+		dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+			"Отсутствует заголовок HashSHA256 в ответе")
+		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 
-		resp, err = req.SetBody(
-			&Metrics{
-				ID:    id,
-				MType: "counter",
-				Delta: &value2,
-			}).Post("update/")
+		resp, err = suite.SetSignedBody(req, &Metrics{
+			ID:    id,
+			MType: "counter",
+			Delta: &value2,
+		}).Post("update/")
 
 		dumpErr = dumpErr && suite.Assert().NoError(err,
 			"Ошибка при попытке сделать запрос с обновлением counter")
 		dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
 			"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
+		dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+			"Отсутствует заголовок HashSHA256 в ответе")
+		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 
-		resp, err = req.
-			SetBody(&Metrics{
-				ID:    id,
-				MType: "counter",
-			}).
+		resp, err = suite.SetSignedBody(req, &Metrics{
+			ID:    id,
+			MType: "counter",
+		}).
 			SetResult(&result).
 			Post("value/")
 
@@ -249,11 +256,13 @@ func (suite *Iteration14Suite) TestCounterGzipHandlers() {
 			"Заголовок ответа Content-Type содержит несоответствующее значение")
 		dumpErr = dumpErr && suite.Assert().Containsf(resp.Header().Get("Content-Encoding"), "gzip",
 			"Заголовок ответа Content-Encoding содержит несоответствующее значение")
+		dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+			"Отсутствует заголовок HashSHA256 в ответе")
+		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 		dumpErr = dumpErr && suite.NotNil(result.Delta,
 			"Несоответствие отправленного значения counter (r:%d+w:%d+w:%d) полученному от сервера (nil), '%q %s'", value0, value1, value2, req.Method, req.URL)
 		dumpErr = dumpErr && suite.Assert().Equalf(value0+value1+value2, *result.Delta,
 			"Несоответствие отправленного значения counter (r:%d+w:%d+w:%d) полученному от сервера (%d), '%q %s'", value0, value1, value2, *result.Delta, req.Method, req.URL)
-		// dumpErr = dumpErr && suite.Equal(suite.Hash(&result), result.Hash, "Хеш-сумма не соответствует расчетной")
 
 		if !dumpErr {
 			dump := dumpRequest(req.RawRequest, true)
@@ -278,28 +287,28 @@ func (suite *Iteration14Suite) TestGaugeGzipHandlers() {
 	suite.Run("update", func() {
 		value := suite.rnd.Float64() * 1e6
 		req := httpc.R().
-			SetHeader("Hash", "none").
 			SetHeader("Accept-Encoding", "gzip").
 			SetHeader("Content-Type", "application/json")
 
-		resp, err := req.SetBody(
-			&Metrics{
-				ID:    id,
-				MType: "gauge",
-				Value: &value,
-			}).Post("update/")
+		resp, err := suite.SetSignedBody(req, &Metrics{
+			ID:    id,
+			MType: "gauge",
+			Value: &value,
+		}).Post("update/")
 
 		dumpErr := suite.Assert().NoError(err,
 			"Ошибка при попытке сделать запрос с обновлением gauge")
 		dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
 			"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
+		dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+			"Отсутствует заголовок HashSHA256 в ответе")
+		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 
 		var result Metrics
-		resp, err = req.
-			SetBody(&Metrics{
-				ID:    id,
-				MType: "gauge",
-			}).
+		resp, err = suite.SetSignedBody(req, &Metrics{
+			ID:    id,
+			MType: "gauge",
+		}).
 			SetResult(&result).
 			Post("value/")
 
@@ -311,11 +320,13 @@ func (suite *Iteration14Suite) TestGaugeGzipHandlers() {
 			"Заголовок ответа Content-Type содержит несоответствующее значение")
 		dumpErr = dumpErr && suite.Assert().Containsf(resp.Header().Get("Content-Encoding"), "gzip",
 			"Заголовок ответа Content-Encoding содержит несоответствующее значение")
+		dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+			"Отсутствует заголовок HashSHA256 в ответе")
+		dumpErr = dumpErr && suite.AssertResponseHash(resp)
 		dumpErr = dumpErr && suite.Assert().NotEqualf(nil, result.Value,
 			"Несоответствие отправленного значения gauge (%f) полученному от сервера (nil), '%q %s'", value, req.Method, req.URL)
 		dumpErr = dumpErr && suite.Assert().Equalf(value, *result.Value,
 			"Несоответствие отправленного значения gauge (%f) полученному от сервера (%f), '%q %s'", value, *result.Value, req.Method, req.URL)
-		// dumpErr = dumpErr && suite.Equal(suite.Hash(&result), result.Hash, "Хеш-сумма не соответствует расчетной")
 
 		if !dumpErr {
 			dump := dumpRequest(req.RawRequest, true)
@@ -392,11 +403,10 @@ cont:
 			time.Sleep(100 * time.Millisecond)
 
 			var result Metrics
-			resp, err = req.
-				SetBody(&Metrics{
-					ID:    tt.name,
-					MType: tt.method,
-				}).
+			resp, err = suite.SetSignedBody(req, &Metrics{
+				ID:    tt.name,
+				MType: tt.method,
+			}).
 				SetResult(&result).
 				Post("/value/")
 
@@ -407,8 +417,13 @@ cont:
 				continue
 			}
 
+			dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
+				"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().Containsf(resp.Header().Get("Content-Type"), "application/json",
 				"Заголовок ответа Content-Type содержит несоответствующее значение")
+			dumpErr = dumpErr && suite.Assert().NotEmpty(resp.Header().Get("HashSHA256"),
+				"Отсутствует заголовок HashSHA256 в ответе")
+			dumpErr = dumpErr && suite.AssertResponseHash(resp)
 			dumpErr = dumpErr && suite.Assert().True(result.MType != "gauge" || result.Value != nil,
 				"Получен не однозначный результат (возвращаемое значение value=nil не соответствет типу gauge) '%q %s'", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().True(result.MType != "counter" || result.Delta != nil,
@@ -417,11 +432,8 @@ cont:
 				"Получен результат без данных (Dalta == nil && Value == nil) '%q %s'", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().False(result.Delta != nil && result.Value != nil,
 				"Получен не однозначный результат (Dalta != nil && Value != nil) '%q %s'", req.Method, req.URL)
-			dumpErr = dumpErr && suite.Assert().Equalf(http.StatusOK, resp.StatusCode(),
-				"Несоответствие статус кода ответа ожидаемому в хендлере %q: %q ", req.Method, req.URL)
 			dumpErr = dumpErr && suite.Assert().True(result.MType == "gauge" || result.MType == "counter",
 				"Получен ответ с неизвестным значением типа: %q, '%q %s'", result.MType, req.Method, req.URL)
-			// dumpErr = dumpErr && suite.Equal(suite.Hash(&result), result.Hash, "Хеш-сумма не соответствует расчетной")
 
 			if !dumpErr {
 				dump := dumpRequest(req.RawRequest, true)
@@ -459,21 +471,45 @@ cont:
 	}
 }
 
-// func (suite *Iteration14Suite) SetHBody(r *resty.Request, m *Metrics) *resty.Request {
-// 	hash := suite.Hash(m)
-// 	m.Hash = hash
-// 	return r.SetBody(m)
-// }
+func (suite *Iteration14Suite) TestRejectInvalidHash() {
+	httpc := resty.New().SetHostURL(suite.serverAddress)
 
-// func (suite *Iteration14Suite) Hash(m *Metrics) string {
-// 	var data string
-// 	switch m.MType {
-// 	case "counter":
-// 		data = fmt.Sprintf("%s:%s:%d", m.ID, m.MType, *m.Delta)
-// 	case "gauge":
-// 		data = fmt.Sprintf("%s:%s:%f", m.ID, m.MType, *m.Value)
-// 	}
-// 	h := hmac.New(sha256.New, suite.key)
-// 	h.Write([]byte(data))
-// 	return fmt.Sprintf("%x", h.Sum(nil))
-// }
+	id := "InvalidHash" + strconv.Itoa(suite.rnd.Intn(256))
+	value := suite.rnd.Float64() * 1e6
+	req := httpc.R().
+		SetHeader("Content-Type", "application/json")
+
+	resp, err := req.
+		SetHeader("HashSHA256", "invalid-hash").
+		SetBody(&Metrics{
+			ID:    id,
+			MType: "gauge",
+			Value: &value,
+		}).
+		Post("update/")
+
+	suite.Require().NoError(err, "Ошибка при попытке сделать запрос с некорректным хешем")
+	suite.Require().Equal(http.StatusBadRequest, resp.StatusCode(),
+		"Сервер должен отклонять запрос с некорректным HashSHA256")
+}
+
+func (suite *Iteration14Suite) SetSignedBody(r *resty.Request, m *Metrics) *resty.Request {
+	body, err := json.Marshal(m)
+	suite.Require().NoError(err, "Не удалось сериализовать тело запроса для подписи")
+
+	return r.
+		SetHeader("HashSHA256", suite.Hash(body)).
+		SetBody(body)
+}
+
+func (suite *Iteration14Suite) Hash(data []byte) string {
+	h := hmac.New(sha256.New, suite.key)
+	h.Write([]byte(data))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func (suite *Iteration14Suite) AssertResponseHash(resp *resty.Response) bool {
+	expectedHash := suite.Hash(resp.Body())
+	return suite.Assert().Equal(expectedHash, resp.Header().Get("HashSHA256"),
+		"Заголовок HashSHA256 не соответствует ожидаемому хешу тела ответа")
+}
